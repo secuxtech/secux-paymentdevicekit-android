@@ -33,6 +33,7 @@ public class PaymentPeripheralManager {
         if (devInfo.first==null || devInfo.second==null){
 
             Log.i("", "find device failed!");
+            return ret;
         }
 
         if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout)){

@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
                 PaymentPeripheralManager peripheralManager = new PaymentPeripheralManager();
-                peripheralManager.doGetIVKey(mContext, 5000, "4ab10000726b", -80, 5000);
+                peripheralManager.doGetIVKey(mContext, 5000, "4ab10000726b", -80, 10000);
             }
         }).start();
 
