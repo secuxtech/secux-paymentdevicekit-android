@@ -1,0 +1,2 @@
+include ':app', ':secux-paymentdevicekit'
+rootProject.name='paymentdeviceexample'
