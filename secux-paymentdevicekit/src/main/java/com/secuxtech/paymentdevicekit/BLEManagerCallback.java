@@ -37,7 +37,7 @@ public abstract class BLEManagerCallback {
     @Retention(RetentionPolicy.SOURCE)
     public @interface ConnDevStatus {}
 
-    public void newBLEDevice(){
+    public void newBLEDevice(BLEDevice device){
 
     }
 

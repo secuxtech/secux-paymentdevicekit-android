@@ -19,6 +19,7 @@ import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.os.Build;
 import android.os.ParcelUuid;
+import android.os.SystemClock;
 import android.util.Log;
 
 
@@ -33,19 +34,23 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+import javax.security.auth.login.LoginException;
+
 import static com.secuxtech.paymentdevicekit.BLEManagerCallback.*;
 
 public class BLEManager {
 
-    public ArrayList<BLEDevice> mBleDevArrList = new ArrayList<BLEDevice>();
+    public final static String TAG = "secux-paymentdevicekit";
+
+    protected ArrayList<BLEDevice> mBleDevArrList = new ArrayList<BLEDevice>();
 
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothManager mBluetoothManager;
     private BluetoothLeScanner mBluetoothScanner;
 
-    private BluetoothGatt mBluetoothGatt = null;
-    private BluetoothGattCharacteristic mBluetoothRxCharacter = null;
-    private BluetoothGattCharacteristic mBluetoothTxCharacter = null;
+    protected BluetoothGatt mBluetoothGatt = null;
+    protected BluetoothGattCharacteristic mBluetoothRxCharacter = null;
+    protected BluetoothGattCharacteristic mBluetoothTxCharacter = null;
 
     protected BLEManagerCallback mBleCallback = null;
     protected ScanCallback mScanCallback = null;
@@ -63,10 +68,9 @@ public class BLEManager {
 
     private static Object mWriteDoneLockObject = new Object();
     private static Object mReadDoneLockObject = new Object();
-    private static Object mConnectDoneLockObject = new Object();
+    protected static Object mConnectDoneLockObject = new Object();
 
-
-    private List<Byte> mRecvData = new ArrayList<Byte>();
+    private byte[] mRecvData = null;
 
     public Context mContext = null;
 
@@ -100,7 +104,7 @@ public class BLEManager {
     }
 
     public void startScan(){
-        Log.d("info", "Start ble scan");
+        Log.d(TAG, "Start ble scan");
 
         mBleDevArrList.clear();
         //mBluetoothScanner.startScan(scanCallback);
@@ -117,7 +121,7 @@ public class BLEManager {
     }
 
     public void stopScan(){
-        Log.d("info", "Stop ble scan");
+        Log.d(TAG, "Stop ble scan");
         mBluetoothScanner.stopScan(mScanCallback);
     }
 
@@ -137,18 +141,16 @@ public class BLEManager {
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             super.onConnectionStateChange(gatt, status, newState);
 
-            Log.d("BLEManager", "onConnectionStateChange: thread "
-                    + Thread.currentThread() + " status " + newState);
-
-
+            Log.d(TAG, "onConnectionStateChange: thread "
+                    + Thread.currentThread() + " status " + String.valueOf(status) + "state " + String.valueOf(newState));
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
+
                 String err = "Cannot connect device with error status: " + status;
-                // 當嘗試連線失敗的時候呼叫 disconnect 方法是不會引起這個方法回撥的，所以這裡
-                //   直接回調就可以了。
+
                 gatt.close();
                 mBluetoothGatt = null;
-                Log.e("BLEManager", err);
+                Log.e(TAG, err);
 
                 if (mBleCallback != null){
                     mBleCallback.updateConnDevStatus(BlEDEV_ConnFailed);
@@ -158,12 +160,12 @@ public class BLEManager {
 
 
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                Log.i(TAG, "Device is connected");
                 //getDevServiceAndCharacteristicsAsyn();
                 gatt.discoverServices();
 
-
-
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                Log.i(TAG, SystemClock.uptimeMillis() + " Device is disconnected");
                 mBluetoothGatt.close();
                 mBluetoothGatt = null;
 
@@ -174,24 +176,23 @@ public class BLEManager {
 
         }
 
-        //發現新服務，即呼叫了mBluetoothGatt.discoverServices()後，返回的資料
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             super.onServicesDiscovered(gatt, status);
 
             boolean findService = false;
-            List<BluetoothGattService> services = mBluetoothGatt.getServices();
+            List<BluetoothGattService> services = gatt.getServices();
             for (BluetoothGattService gattService : services) {
 
                 final String uuid = gattService.getUuid().toString();
-                Log.i("BLEManager", "Service discovered: " + uuid);
+                Log.i(TAG, "Service discovered: " + uuid);
 
                 if (uuid.compareToIgnoreCase(BLEManager.ServiceUUID)!=0){
                     continue;
                 }
 
                 findService = true;
-                Log.i("BLEManager", "find service");
+                Log.i(TAG, "find service");
 
                 new ArrayList<HashMap<String, String>>();
                 List<BluetoothGattCharacteristic> gattCharacteristics =
@@ -203,14 +204,14 @@ public class BLEManager {
                         gattCharacteristics) {
 
                     final String charUuid = gattCharacteristic.getUuid().toString();
-                    Log.i("BLEManager", "Characteristic discovered for service: " + charUuid);
+                    Log.i(TAG, "Characteristic discovered for service: " + charUuid);
 
                     if (charUuid.compareToIgnoreCase(BLEManager.RXCharacteristicUUID) == 0){
-                        Log.i("BLEManager", "Find Rx");
+                        Log.i(TAG, "Find Rx");
                         findRx = true;
                         mBluetoothRxCharacter = gattCharacteristic;
                     }else if (charUuid.compareToIgnoreCase(BLEManager.TXCharacteristicUUID)==0){
-                        Log.i("BLEManager", "Find Tx");
+                        Log.i(TAG, "Find Tx");
                         findTx = true;
                         mBluetoothTxCharacter = gattCharacteristic;
                     }
@@ -220,23 +221,21 @@ public class BLEManager {
                             mConnectDoneLockObject.notify();
                         }
 
-                        if (mBleCallback != null){
+                        mBluetoothTxCharacter.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
 
-                            mBluetoothTxCharacter.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+                        mBluetoothGatt.setCharacteristicNotification(mBluetoothRxCharacter,true);
 
-                            mBluetoothGatt.setCharacteristicNotification(mBluetoothRxCharacter,true);
+                        List<BluetoothGattDescriptor> descriptorList = mBluetoothRxCharacter.getDescriptors();
+                        if(descriptorList != null && descriptorList.size() > 0) {
+                            for(BluetoothGattDescriptor descriptor : descriptorList) {
+                                descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                                mBluetoothGatt.writeDescriptor(descriptor);
 
-                            List<BluetoothGattDescriptor> descriptorList = mBluetoothRxCharacter.getDescriptors();
-                            if(descriptorList != null && descriptorList.size() > 0) {
-                                for(BluetoothGattDescriptor descriptor : descriptorList) {
-                                    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                                    mBluetoothGatt.writeDescriptor(descriptor);
-
-                                    //descriptor.setValue(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
-                                    //mBluetoothGatt.writeDescriptor(descriptor);
-                                }
+                                //descriptor.setValue(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE);
+                                //mBluetoothGatt.writeDescriptor(descriptor);
                             }
                         }
+
                         break;
                     }
 
@@ -246,12 +245,20 @@ public class BLEManager {
                     if (mBleCallback != null){
                         mBleCallback.updateConnDevStatus(BlEDEV_FindCharacteristicsFailed);
                     }
+
+                    synchronized (mConnectDoneLockObject) {
+                        mConnectDoneLockObject.notify();
+                    }
                 }
             }
 
             if (!findService){
                 if (mBleCallback != null){
                     mBleCallback.updateConnDevStatus(BlEDEV_FindServiceFailed);
+                }
+
+                synchronized (mConnectDoneLockObject) {
+                    mConnectDoneLockObject.notify();
                 }
             }
         }
@@ -261,17 +268,9 @@ public class BLEManager {
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             super.onCharacteristicRead(gatt, characteristic, status);
 
-            /*
-            mRecvData = characteristic.getValue();
-
-            if (mRecvData != null){
-                for (byte b: mRecvData){
-                    Log.i("myactivity", String.format("%x", b));
-                }
-            }
-
 
             if (status != BluetoothGatt.GATT_SUCCESS){
+                /*
                 if (mBleCallback!=null){
                     mBleCallback.updateConnDevStatus(BlEDEV_ReadFailed);
                 }
@@ -279,14 +278,24 @@ public class BLEManager {
                 synchronized (mReadDoneLockObject) {
                     mReadDoneLockObject.notify();
                 }
+
+                 */
                 return;
+            }
+
+
+            mRecvData = characteristic.getValue();
+            if (mRecvData != null){
+                for (byte b: mRecvData){
+                    Log.d(TAG, String.format("%x", b));
+                }
             }
 
             synchronized (mReadDoneLockObject){
                 mReadDoneLockObject.notify();
             }
 
-             */
+
 
         }
 
@@ -306,7 +315,7 @@ public class BLEManager {
                 return;
             }
 
-            Log.i("BLEManager", "writ done");
+            Log.i("BLEManager", String.valueOf(SystemClock.uptimeMillis()) + " writ done");
         }
 
 
@@ -314,55 +323,10 @@ public class BLEManager {
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             super.onCharacteristicChanged(gatt, characteristic);
 
-            final byte[] received = characteristic.getValue();
-
-
-            if (received != null && received.length > 0){
-                /*
-                for (byte b: mRecvData){
-                    Log.i("BLEManager", String.format("%x", b));
-                }
-                */
-
-                new Thread(new Runnable() {
-                    byte[] recvByte = received;
-
-                    @Override
-                    public void run() {
-                        synchronized (mReadDoneLockObject){
-
-                        String strData = "";
-                        for(int i=0; i<recvByte.length; i++){
-                            strData += String.format("%d, ", recvByte[i]);
-
-                            mRecvData.add(Byte.valueOf(recvByte[i]));
-                        }
-
-                        Log.i("BLEManager", "received data:" + strData);
-
-                        /*
-                        mRecvData = new Byte[recvByte.length];
-                        for (int i=0; i<recvByte.length; i++){
-                            mRecvData[i] = Byte.valueOf(recvByte[i]);
-                        }
-                        */
-
-                        Integer[] recvData = new Integer[mRecvData.size()];
-                        int i=0;
-                        for(Byte btData : mRecvData){
-                            recvData[i] = Integer.valueOf(btData);
-                            i+=1;
-                        }
-
-
-
-                            mReadDoneLockObject.notify();
-                        }
-                    }
-                }).start();
-
+            synchronized (mReadDoneLockObject) {
+                mRecvData = characteristic.getValue();
+                mReadDoneLockObject.notify();
             }
-
 
         }
 
@@ -375,7 +339,8 @@ public class BLEManager {
         public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {//descriptor寫
             super.onDescriptorWrite(gatt, descriptor, status);
 
-            mBleCallback.updateConnDevStatus(BlEDEV_ConnDone);
+            if (mBleCallback!=null)
+                mBleCallback.updateConnDevStatus(BlEDEV_ConnDone);
         }
 
         @Override
@@ -419,7 +384,7 @@ public class BLEManager {
     }
 
     public synchronized void sendData(byte[] data){
-        this.mRecvData.clear();
+        this.mRecvData = null;
 
         if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
             Log.i("BLEManager", "send data ");
@@ -435,7 +400,7 @@ public class BLEManager {
 
 
     public synchronized void sendData(String str){
-        this.mRecvData.clear();
+        this.mRecvData = null;
 
         if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
             this.mBluetoothTxCharacter.setValue(str);
@@ -443,30 +408,20 @@ public class BLEManager {
         }
     }
 
-    public boolean connectWithDevice(BluetoothDevice device, long connectTimeout){
-        if (mContext!=null){
-            synchronized (mConnectDoneLockObject) {
-                device.connectGatt(mContext, true, mBluetoothGattCallback);
 
-                try{
-                    mConnectDoneLockObject.wait(connectTimeout);
-                }catch (InterruptedException e){
-                    e.printStackTrace();
-                }
-            }
-
-
-        }
-
-        return (mBluetoothTxCharacter!=null && mBluetoothRxCharacter!=null);
-    }
 
     public byte[] sendCmdRecvData(String cmd){
         return sendCmdRecvData(cmd.getBytes());
     }
 
     public byte[] sendCmdRecvData(byte[] cmd){
-        this.mRecvData.clear();
+        String strMsg = "";
+        for (byte b: cmd){
+            strMsg += String.format("%x ", b);
+        }
+        Log.i(TAG, strMsg);
+
+        this.mRecvData = null;
 
         if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
 
@@ -475,7 +430,7 @@ public class BLEManager {
                 mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
 
                 try {
-                    mWriteDoneLockObject.wait(2000);
+                    mWriteDoneLockObject.wait(10000);
 
                 } catch (InterruptedException e) {
                     e.printStackTrace();
@@ -483,12 +438,12 @@ public class BLEManager {
             }
 
 
-            BluetoothGattCharacteristic blechar = mBluetoothGatt.getService(UUID.fromString(BLEManager.ServiceUUID)).getCharacteristic(UUID.fromString(BLEManager.RXCharacteristicUUID));
+            //BluetoothGattCharacteristic blechar = mBluetoothGatt.getService(UUID.fromString(BLEManager.ServiceUUID)).getCharacteristic(UUID.fromString(BLEManager.RXCharacteristicUUID));
             //boolean ret = mBluetoothGatt.readCharacteristic(this.mBluetoothRxCharacter);
 
             synchronized (mReadDoneLockObject){
                 try {
-                    mReadDoneLockObject.wait(2000);
+                    mReadDoneLockObject.wait(10000);
 
                 }catch (InterruptedException e){
                     e.printStackTrace();
@@ -497,12 +452,6 @@ public class BLEManager {
 
         }
 
-
-        byte[] recvData = new byte[this.mRecvData.size()];
-        for(int i=0; i<this.mRecvData.size(); i++){
-            recvData[i] = this.mRecvData.get(i);
-        }
-
-        return recvData;
+        return mRecvData;
     }
 }

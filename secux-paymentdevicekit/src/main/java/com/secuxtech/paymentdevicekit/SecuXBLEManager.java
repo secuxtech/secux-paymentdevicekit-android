@@ -22,6 +22,7 @@ public class SecuXBLEManager extends BLEManager{
 
     private static SecuXBLEManager instance = null;
 
+
     public static SecuXBLEManager getInstance(){
         if (instance == null){
             instance = new SecuXBLEManager();
@@ -34,43 +35,70 @@ public class SecuXBLEManager extends BLEManager{
         setScanCallback();
     }
 
-    public String mDeviceID = "";
-    public long mScanTimeout = 0;
-    public long mConnTimeout = 0;
+    private String mDeviceID = "";
+    private long mConnTimeout = 0;
+    private int mScanRSSI = -90;
 
     private BluetoothDevice mDevice = null;
     private PaymentPeripheral mPaymentPeripheral = null;
+    private byte[] mValidatePeripheralCommand = null;
     private static Object mScanDevDoneLockObject = new Object();
+    //private com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
 
-    public Pair<BluetoothDevice, PaymentPeripheral> scanForTheDevice(String devID, long timeout){
+    public byte[] getValidatePeripheralCommand(){
+        return mValidatePeripheralCommand;
+    }
+
+    public Pair<BluetoothDevice, PaymentPeripheral> scanForTheDevice(String devID, long timeout, int rssi){
         synchronized (mScanDevDoneLockObject) {
+            mDeviceID = devID;
+            mPaymentPeripheral = null;
             mDevice = null;
+            mValidatePeripheralCommand = null;
+            mScanRSSI = rssi;
+
             startScan();
             try{
                 mScanDevDoneLockObject.wait(timeout);
             }catch (InterruptedException e){
                 e.printStackTrace();
             }
+            stopScan();
         }
         return new Pair<>(mDevice, mPaymentPeripheral);
+    }
+
+    public boolean connectWithDevice(BluetoothDevice device, long connectTimeout){
+        if (mContext!=null){
+            synchronized (mConnectDoneLockObject) {
+                mConnTimeout = connectTimeout;
+                this.mBluetoothGatt = device.connectGatt(mContext, true, mBluetoothGattCallback);
+
+                try{
+                    mConnectDoneLockObject.wait(connectTimeout);
+                }catch (InterruptedException e){
+                    e.printStackTrace();
+                }
+            }
+
+
+        }
+
+        return (mBluetoothTxCharacter!=null && mBluetoothRxCharacter!=null);
     }
 
     private void setScanCallback(){
         mScanCallback = new ScanCallback() {
             @Override
             public void onScanResult(int callbackType, ScanResult result) {
-                byte[] scanData=result.getScanRecord().getBytes();
-                //把byte数组转成16进制字符串，方便查看
 
-                //Log.e("TAG","onScanResult :"+result.getScanRecord().toString());
-
-                BluetoothDevice device = result.getDevice();
+                int rssi = result.getRssi();
+                if (rssi < mScanRSSI)
+                    return;
 
                 byte[] scanResult = result.getScanRecord().getBytes();
 
-                int rssi = result.getRssi();
-
-
+                BluetoothDevice device = result.getDevice();
                 BLEDevice dev = new BLEDevice();
                 dev.Rssi = rssi;
                 dev.device = device;
@@ -80,7 +108,7 @@ public class SecuXBLEManager extends BLEManager{
                     for (int i = 0; i < mBleDevArrList.size(); i++) {
                         //System.out.println(cars.get(i));
                         BLEDevice devItem = mBleDevArrList.get(i);
-                        if (devItem.device.getName().compareToIgnoreCase(device.getName())==0){
+                        if (devItem.device.equals(device)){
                             bFindDev = true;
 
                             if (devItem.Rssi != rssi){
@@ -95,14 +123,14 @@ public class SecuXBLEManager extends BLEManager{
                         }
 
                     }
-                    if (!bFindDev && device.getName() != null) {
+                    if (!bFindDev && mPaymentPeripheral==null) {
 
                         mBleDevArrList.add(dev);
-                        Log.i("BLEManager", "add new device " + mBleDevArrList.size() + " " + device.getName() );
+                        Log.i(TAG, "new device " + mBleDevArrList.size() + " " + device.getName() );
 
                         List<ADStructure> structures = ADPayloadParser.getInstance().parse(scanResult);
                         for (ADStructure adStructure : structures) {
-                            Log.d("","adStructure: " + adStructure);
+                            Log.d(TAG,"adStructure: " + adStructure);
                             //PaymentUtil.debug("adStructure: " + adStructure);
 
                             if (adStructure instanceof ServiceData) {
@@ -112,16 +140,31 @@ public class SecuXBLEManager extends BLEManager{
                                 byte[] advertisedData = Arrays.copyOfRange(raw, 2, raw.length);
                                 //scannedDevice.setAdvertisedData(advertisedData);
 
-                                com.secux.payment.cpp.MyNDK ndk = new com.secux.payment.cpp.MyNDK();
                                 if( advertisedData != null ) {
-                                    PaymentPeripheral paymentPeripheral = ndk.createPaymentPeripheralObjectFromNative(advertisedData);
+                                    String strMsg = "";
+                                    for (byte b: advertisedData){
+                                        strMsg += String.format("%02x ", b);
+                                    }
+                                    Log.i(TAG, "advertisedData " + strMsg);
+
+                                    com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
+                                    PaymentPeripheral paymentPeripheral = mNdk.createPaymentPeripheralObjectFromNative(advertisedData);
+                                    String fwVer = paymentPeripheral.getFirmwareVersion();
                                     String uid = paymentPeripheral.getUniqueId();
-                                    Log.i("", uid);
+                                    Log.i(TAG, "Dev UUID=" + uid + " FW ver=" + fwVer);
+                                    dev.deviceID = uid;
 
                                     if (uid.compareToIgnoreCase(mDeviceID)==0){
-                                        mDevice = device;
-                                        mPaymentPeripheral = paymentPeripheral;
+                                        mValidatePeripheralCommand = mNdk.getValidatePeripheralCommand(5, paymentPeripheral);
+                                        strMsg = "";
+                                        for (byte b: mValidatePeripheralCommand){
+                                            strMsg += String.format("%x ", b);
+                                        }
+                                        Log.i(TAG, "mValidatePeripheralCommand " + strMsg);
+
                                         synchronized (mScanDevDoneLockObject) {
+                                            mDevice = device;
+                                            mPaymentPeripheral = paymentPeripheral;
                                             mScanDevDoneLockObject.notify();
                                         }
                                     }
@@ -129,10 +172,8 @@ public class SecuXBLEManager extends BLEManager{
                             }
                         }
 
-
-
                         if (mBleCallback != null){
-                            mBleCallback.newBLEDevice();
+                            mBleCallback.newBLEDevice(dev);
                         }
 
                     /*
