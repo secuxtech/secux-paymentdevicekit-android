@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.Pair;
 
@@ -43,7 +44,7 @@ public class SecuXBLEManager extends BLEManager{
     private PaymentPeripheral mPaymentPeripheral = null;
     private byte[] mValidatePeripheralCommand = null;
     private static Object mScanDevDoneLockObject = new Object();
-    //private com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
+    private com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
 
     public byte[] getValidatePeripheralCommand(){
         return mValidatePeripheralCommand;
@@ -57,7 +58,7 @@ public class SecuXBLEManager extends BLEManager{
             mValidatePeripheralCommand = null;
             mScanRSSI = rssi;
 
-            startScan();
+            startScan(false);
             try{
                 mScanDevDoneLockObject.wait(timeout);
             }catch (InterruptedException e){
@@ -68,11 +69,40 @@ public class SecuXBLEManager extends BLEManager{
         return new Pair<>(mDevice, mPaymentPeripheral);
     }
 
+    public Pair<BluetoothDevice, PaymentPeripheral> findTheDevice(String devID, long timeout, int rssi){
+        synchronized (mScanDevDoneLockObject) {
+            mDeviceID = devID;
+            mPaymentPeripheral = null;
+            mDevice = null;
+            mValidatePeripheralCommand = null;
+            mScanRSSI = rssi;
+            mScanWithCallbackFlag = false;
+            try{
+                mScanDevDoneLockObject.wait(timeout);
+            }catch (InterruptedException e){
+                e.printStackTrace();
+            }
+            mDeviceID = "";
+            mScanWithCallbackFlag = true;
+        }
+        return new Pair<>(mDevice, mPaymentPeripheral);
+    }
+
+    public void startScan(){
+        mPaymentPeripheral = null;
+        startScan(true);
+    }
+
     public boolean connectWithDevice(BluetoothDevice device, long connectTimeout){
         if (mContext!=null){
+
             synchronized (mConnectDoneLockObject) {
+                Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " ConnectWithDevice");
+                mConnectDone = false;
+                mBluetoothRxCharacter = null;
+                mBluetoothTxCharacter = null;
                 mConnTimeout = connectTimeout;
-                this.mBluetoothGatt = device.connectGatt(mContext, true, mBluetoothGattCallback);
+                this.mBluetoothGatt = device.connectGatt(mContext, false, mBluetoothGattCallback);
 
                 try{
                     mConnectDoneLockObject.wait(connectTimeout);
@@ -81,9 +111,9 @@ public class SecuXBLEManager extends BLEManager{
                 }
             }
 
-
         }
 
+        mConnectDone = true;
         return (mBluetoothTxCharacter!=null && mBluetoothRxCharacter!=null);
     }
 
@@ -105,6 +135,8 @@ public class SecuXBLEManager extends BLEManager{
 
                 boolean bFindDev = false;
                 if (device!=null && device.getName()!=null && device.getName().length()!=0){
+                    //Log.i(TAG, "device " + device.getName() );
+
                     for (int i = 0; i < mBleDevArrList.size(); i++) {
                         //System.out.println(cars.get(i));
                         BLEDevice devItem = mBleDevArrList.get(i);
@@ -121,12 +153,14 @@ public class SecuXBLEManager extends BLEManager{
 
                             break;
                         }
-
                     }
-                    if (!bFindDev && mPaymentPeripheral==null) {
 
-                        mBleDevArrList.add(dev);
-                        Log.i(TAG, "new device " + mBleDevArrList.size() + " " + device.getName() );
+                    if ((!bFindDev || !mScanWithCallbackFlag) && mPaymentPeripheral==null) {
+
+                        if (!bFindDev) {
+                            mBleDevArrList.add(dev);
+                            Log.i(TAG, "new device " + mBleDevArrList.size() + " " + device.getName());
+                        }
 
                         List<ADStructure> structures = ADPayloadParser.getInstance().parse(scanResult);
                         for (ADStructure adStructure : structures) {
@@ -147,7 +181,7 @@ public class SecuXBLEManager extends BLEManager{
                                     }
                                     Log.i(TAG, "advertisedData " + strMsg);
 
-                                    com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
+                                    //com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
                                     PaymentPeripheral paymentPeripheral = mNdk.createPaymentPeripheralObjectFromNative(advertisedData);
                                     String fwVer = paymentPeripheral.getFirmwareVersion();
                                     String uid = paymentPeripheral.getUniqueId();
@@ -156,6 +190,7 @@ public class SecuXBLEManager extends BLEManager{
 
                                     if (uid.compareToIgnoreCase(mDeviceID)==0){
                                         mValidatePeripheralCommand = mNdk.getValidatePeripheralCommand(5, paymentPeripheral);
+
                                         strMsg = "";
                                         for (byte b: mValidatePeripheralCommand){
                                             strMsg += String.format("%x ", b);
@@ -163,6 +198,7 @@ public class SecuXBLEManager extends BLEManager{
                                         Log.i(TAG, "mValidatePeripheralCommand " + strMsg);
 
                                         synchronized (mScanDevDoneLockObject) {
+
                                             mDevice = device;
                                             mPaymentPeripheral = paymentPeripheral;
                                             mScanDevDoneLockObject.notify();
@@ -172,7 +208,7 @@ public class SecuXBLEManager extends BLEManager{
                             }
                         }
 
-                        if (mBleCallback != null){
+                        if (mBleCallback != null && !bFindDev){
                             mBleCallback.newBLEDevice(dev);
                         }
 
@@ -189,11 +225,13 @@ public class SecuXBLEManager extends BLEManager{
             @Override
             public void onBatchScanResults(List<ScanResult> results) {
                 super.onBatchScanResults(results);
+
             }
 
             @Override
             public void onScanFailed(int errorCode) {
                 super.onScanFailed(errorCode);
+                Log.e(TAG, "scan error " + errorCode);
             }
         };
     }
