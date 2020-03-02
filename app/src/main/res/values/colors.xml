@@ -4,7 +4,11 @@
     <color name="colorPrimaryDark">#00574B</color>
     <color name="colorAccent">#D81B60</color>
     <color name="colorTitle">#9C27B0</color>
+    <color name="colorPageBkg">#F8F8F8</color>
     <color name="colorAccountInfo">#707070</color>
-    <color name="colorDevSelected">#C67AD5</color>
+    <color name="colorDevSelected">#E4B4EE</color>
     <color name="colorDevUnselected">#FFFFFF</color>
+    <color name="colorProgressRing">#9C27B0</color>
+    <color name="colorTestButton">#9730A8</color>
+    <color name="colorRescanButton">#E178F5</color>
 </resources>
