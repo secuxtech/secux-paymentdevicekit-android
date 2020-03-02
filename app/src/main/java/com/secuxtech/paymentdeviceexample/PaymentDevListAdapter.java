@@ -77,6 +77,14 @@ public class PaymentDevListAdapter extends RecyclerView.Adapter<PaymentDevListAd
         mDevList.add(pdev);
     }
 
+    public void clearDeviceList(){
+        mDevList.clear();
+    }
+
+    public List<PaymentDevice> getDevices(){
+        return mDevList;
+    }
+
     class ViewHolder extends RecyclerView.ViewHolder{
         TextView textviewDevName, textviewDevRssi;
         ViewHolder(View itemView) {
@@ -93,10 +101,13 @@ public class PaymentDevListAdapter extends RecyclerView.Adapter<PaymentDevListAd
 
                     PaymentDevice dev = mDevList.get(getAdapterPosition());
                     dev.deviceSelected = !dev.deviceSelected;
-                    if (dev.deviceSelected)
-                        cardView.setBackgroundColor(ContextCompat.getColor(mContext, R.color.colorDevSelected));
-                    else
-                        cardView.setBackgroundColor(ContextCompat.getColor(mContext, R.color.colorDevUnselected));
+                    if (dev.deviceSelected) {
+                        cardView.setCardBackgroundColor(ContextCompat.getColor(mContext, R.color.colorDevSelected));
+
+                    }else {
+                        cardView.setCardBackgroundColor(ContextCompat.getColor(mContext, R.color.colorDevUnselected));
+
+                    }
                 }
             });
 

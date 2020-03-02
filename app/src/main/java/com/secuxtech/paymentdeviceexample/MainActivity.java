@@ -13,7 +13,10 @@ import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Pair;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.secuxtech.paymentdevicekit.BLEDevice;
@@ -28,12 +31,16 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSION_REQUEST_FINE_LOCATION = 1;
+    private static final String TAG = "P20P22 Test Tool";
 
     private Context mContext = this;
     private PaymentDevListAdapter mAdapter;
 
+    private PaymentPeripheralManager mPeripheralManager = new PaymentPeripheralManager();
+
     public ArrayList<BLEDevice> mPaymentDevList = new ArrayList<>();
 
+    private boolean mTestRun = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "The phone DOES NOT support BLE!", Toast.LENGTH_SHORT).show();
         }
 
-        /*
+/*
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -76,7 +83,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
 
-         */
+
+
+ */
 
         SecuXBLEManager.getInstance().startScan();
 
@@ -86,9 +95,115 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    public void onRescanButtonClick(View v){
+        SecuXBLEManager.getInstance().stopScan();
+        mPaymentDevList.clear();
+        mAdapter.clearDeviceList();
+        mAdapter.notifyDataSetChanged();
+
+        SecuXBLEManager.getInstance().startScan();
+    }
+
 
     public void onStartTestButtonClick(View v) {
-        SecuXBLEManager.getInstance().stopScan();
+        //SecuXBLEManager.getInstance().stopScan();
+
+        boolean devSelected = false;
+        for (PaymentDevice dev : mAdapter.getDevices()) {
+            if (dev.deviceSelected) {
+                devSelected = true;
+                break;
+            }
+        }
+
+        if (!devSelected){
+            Toast toast = Toast.makeText(mContext, "Please select the device for testing", Toast.LENGTH_LONG);
+            toast.setGravity(Gravity.CENTER, 0, 0);
+            toast.show();
+            return;
+        }
+
+        mTestRun = true;
+        CommonProgressDialog.showProgressDialog(mContext, "Round 1"); // / " + Setting.getInstance().mTestCount);
+        new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                int idx = 2;
+                boolean runFlag = true;
+
+                List<PaymentDevice> devList = new ArrayList<>();
+                devList.addAll(mAdapter.getDevices());
+                while(true){
+                    //Log.i(TAG, "Round " + i);
+
+                    for (PaymentDevice dev : devList) {
+                        if (dev.deviceSelected) {
+                            Log.i(TAG, "Test " + dev.paymentDev.deviceID);
+                            final PaymentDevice theDev = dev;
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    CommonProgressDialog.setProgressSubTip("Test " + theDev.paymentDev.deviceID);
+                                }
+                            });
+
+                            Pair<Integer, String> ret = mPeripheralManager.doGetIVKeyWithoutStartScan(mContext, 10000, dev.paymentDev.deviceID, -80, 20000);
+                            if (ret.first != PaymentPeripheralManager.SecuX_Peripheral_Operation_OK) {
+                                final PaymentDevice pdev = dev;
+                                final String errorMsg = ret.second;
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        Toast toast = Toast.makeText(mContext, "GetIVKey " + pdev.paymentDev.deviceID + " failed! Error: " + errorMsg, Toast.LENGTH_LONG);
+                                        toast.setGravity(Gravity.CENTER, 0, 0);
+                                        toast.show();
+                                    }
+                                });
+                                runFlag = false;
+                                break;
+                            }else{
+                                Log.i(TAG, "Get IVKey done");
+                            }
+                        }
+
+                        if (!mTestRun)
+                            break;
+                    }
+
+
+                    if (!runFlag || !mTestRun)
+                        break;
+
+                    final int currIdx = idx;
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            CommonProgressDialog.setProgressTip("Round " + currIdx); // + " / " + Setting.getInstance().mTestCount);
+                        }
+                    });
+
+                    idx += 1;
+
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        CommonProgressDialog.dismiss();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    public void onStopTestButtonClick(View v) {
+        mTestRun = false;
     }
 
     private BLEManagerCallback mBLECallback = new BLEManagerCallback() {
