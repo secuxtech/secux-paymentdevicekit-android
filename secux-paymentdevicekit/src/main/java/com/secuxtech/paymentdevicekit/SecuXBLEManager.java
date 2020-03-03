@@ -23,12 +23,11 @@ public class SecuXBLEManager extends BLEManager{
 
     private static SecuXBLEManager instance = null;
 
-
     public static SecuXBLEManager getInstance(){
         if (instance == null){
             instance = new SecuXBLEManager();
         }
-        //manager = instance;
+
         return instance;
     }
 
@@ -37,13 +36,11 @@ public class SecuXBLEManager extends BLEManager{
     }
 
     private String mDeviceID = "";
-    private long mConnTimeout = 0;
     private int mScanRSSI = -90;
 
-    private BluetoothDevice mDevice = null;
     private PaymentPeripheral mPaymentPeripheral = null;
     private byte[] mValidatePeripheralCommand = null;
-    private static Object mScanDevDoneLockObject = new Object();
+
     private com.secux.payment.cpp.MyNDK mNdk = new com.secux.payment.cpp.MyNDK();
 
     public byte[] getValidatePeripheralCommand(){
@@ -97,11 +94,12 @@ public class SecuXBLEManager extends BLEManager{
         if (mContext!=null){
 
             synchronized (mConnectDoneLockObject) {
-                Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " ConnectWithDevice");
+                Log.i(TAG, SystemClock.uptimeMillis() + " ConnectWithDevice");
+                mDevice = device;
                 mConnectDone = false;
                 mBluetoothRxCharacter = null;
                 mBluetoothTxCharacter = null;
-                mConnTimeout = connectTimeout;
+
                 this.mBluetoothGatt = device.connectGatt(mContext, false, mBluetoothGattCallback);
 
                 try{
@@ -110,7 +108,6 @@ public class SecuXBLEManager extends BLEManager{
                     e.printStackTrace();
                 }
             }
-
         }
 
         mConnectDone = true;
@@ -134,7 +131,7 @@ public class SecuXBLEManager extends BLEManager{
                 dev.device = device;
 
                 boolean bFindDev = false;
-                if (device!=null && device.getName()!=null && device.getName().length()!=0){
+                if (device!=null && scanResult!=null && scanResult.length>0){ // && device.getName()!=null && device.getName().length()!=0){
                     //Log.i(TAG, "device " + device.getName() );
 
                     for (int i = 0; i < mBleDevArrList.size(); i++) {
@@ -171,10 +168,14 @@ public class SecuXBLEManager extends BLEManager{
                                 ServiceData serviceData = (ServiceData) adStructure;
                                 //String text_1 = serviceData.toString();
                                 byte[] raw = serviceData.getData();
+                                if (raw.length < 3){
+                                    Log.i(TAG, "Invalid service data!");
+                                    continue;
+                                }
                                 byte[] advertisedData = Arrays.copyOfRange(raw, 2, raw.length);
                                 //scannedDevice.setAdvertisedData(advertisedData);
 
-                                if( advertisedData != null ) {
+                                if( advertisedData != null && advertisedData.length > 0 ) {
                                     String strMsg = "";
                                     for (byte b: advertisedData){
                                         strMsg += String.format("%02x ", b);
@@ -195,7 +196,7 @@ public class SecuXBLEManager extends BLEManager{
                                         for (byte b: mValidatePeripheralCommand){
                                             strMsg += String.format("%x ", b);
                                         }
-                                        Log.i(TAG, "mValidatePeripheralCommand " + strMsg);
+                                        Log.d(TAG, "mValidatePeripheralCommand " + strMsg);
 
                                         synchronized (mScanDevDoneLockObject) {
 
@@ -222,6 +223,7 @@ public class SecuXBLEManager extends BLEManager{
                     }
                 }
             }
+
             @Override
             public void onBatchScanResults(List<ScanResult> results) {
                 super.onBatchScanResults(results);
