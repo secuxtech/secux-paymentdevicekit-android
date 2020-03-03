@@ -2,7 +2,6 @@ package com.secuxtech.paymentdevicekit;
 
 
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
@@ -11,22 +10,17 @@ import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
+
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanResult;
+
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
-import android.os.Build;
+
 import android.os.ParcelUuid;
 import android.os.SystemClock;
 import android.util.Log;
 
-
-import com.example.apple1.mylibrary.PaymentPeripheral;
-import com.neovisionaries.bluetooth.ble.advertising.ADPayloadParser;
-import com.neovisionaries.bluetooth.ble.advertising.ADStructure;
-import com.neovisionaries.bluetooth.ble.advertising.ServiceData;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +28,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
-import javax.security.auth.login.LoginException;
 
 import static com.secuxtech.paymentdevicekit.BLEManagerCallback.*;
 
@@ -46,7 +39,6 @@ public class BLEManager {
 
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothManager mBluetoothManager;
-    private BluetoothLeScanner mBluetoothScanner;
 
     protected BluetoothGatt mBluetoothGatt = null;
     protected BluetoothGattCharacteristic mBluetoothRxCharacter = null;
@@ -65,16 +57,22 @@ public class BLEManager {
     private static final String ServiceUUID =  "BC280001-610E-4C94-A5E2-0F352D4B5256";
     private static final String TXCharacteristicUUID = "BC280003-610E-4C94-A5E2-0F352D4B5256";
     private static final String RXCharacteristicUUID = "BC280002-610E-4C94-A5E2-0F352D4B5256";
+    private static final String DescriptorUUID = "00002902-0000-1000-8000-00805f9b34fb";
 
     private static Object mWriteDoneLockObject = new Object();
     private static Object mReadDoneLockObject = new Object();
     protected static Object mConnectDoneLockObject = new Object();
+    protected static Object mScanDevDoneLockObject = new Object();
 
     private byte[] mRecvData = null;
+    private byte[] mLastSendData = null;
+    private boolean mSendRet = false;
+    protected boolean mConnectDone = false;
 
     public Context mContext = null;
     protected boolean mScanWithCallbackFlag = true;
-    protected boolean mConnectDone = false;
+
+    protected BluetoothDevice mDevice = null;
 
     BLEManager(){
 
@@ -87,7 +85,6 @@ public class BLEManager {
     public void setBLEManager(BluetoothManager bleMgr){
         mBluetoothManager = bleMgr;
         mBluetoothAdapter = mBluetoothManager.getAdapter();
-        mBluetoothScanner = mBluetoothAdapter.getBluetoothLeScanner();
     }
 
     public boolean isSupportBle(){
@@ -115,7 +112,6 @@ public class BLEManager {
         if (mScanWithCallbackFlag) {
             mBleDevArrList.clear();
         }
-
 
         //mBluetoothScanner.startScan(scanCallback);
 
@@ -149,35 +145,33 @@ public class BLEManager {
             super.onPhyRead(gatt, txPhy, rxPhy, status);
         }
 
-        //當連線狀態發生改變
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             super.onConnectionStateChange(gatt, status, newState);
 
-            Log.d(TAG, String.valueOf(SystemClock.uptimeMillis()) + " onConnectionStateChange: thread "
-                    + Thread.currentThread() + " status " + String.valueOf(status) + "state " + String.valueOf(newState));
+            Log.d(TAG, SystemClock.uptimeMillis() + " onConnectionStateChange: thread "
+                    + Thread.currentThread() + " status " + status + "state " + newState);
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
 
-                String err = "Cannot connect device with error status: " + status;
-
-                //gatt.close();
+                gatt.close();
                 mBluetoothGatt = null;
-                Log.e(TAG, err);
 
-                //if (mBleCallback != null){
-                //    mBleCallback.updateConnDevStatus(BlEDEV_ConnFailed);
-                //}
+                if (!mConnectDone) {
+                    mBluetoothGatt = mDevice.connectGatt(mContext, false, mBluetoothGattCallback);
+                }
+
+                if (mBleCallback != null){
+                    mBleCallback.updateConnDevStatus(BlEDEV_ConnFailed);
+                }
                 return;
             }
 
-
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i(TAG, "Device is connected");
-                //getDevServiceAndCharacteristicsAsyn();
 
+                mBluetoothGatt = gatt;
                 if (!mConnectDone) {
-                    mBluetoothGatt = gatt;
                     gatt.discoverServices();
                 }
 
@@ -196,6 +190,28 @@ public class BLEManager {
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
             super.onServicesDiscovered(gatt, status);
+
+            Log.i(TAG, SystemClock.uptimeMillis() + " onServicesDiscovered " + status);
+            if (status != BluetoothGatt.GATT_SUCCESS){
+                return;
+            }
+
+            /*
+
+            //啟動 notify
+            mBluetoothRxCharacter = gatt
+                    .getService(UUID.fromString(ServiceUUID))
+                    .getCharacteristic(UUID.fromString(RXCharacteristicUUID));
+            gatt.setCharacteristicNotification(mBluetoothRxCharacter, true);
+
+            // Write on the config descriptor to be notified when the value changes
+            BluetoothGattDescriptor descriptor = mBluetoothRxCharacter.getDescriptor(UUID.fromString(DescriptorUUID));
+            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+            gatt.writeDescriptor(descriptor);
+
+
+             */
+
 
             boolean findService = false;
             List<BluetoothGattService> services = gatt.getServices();
@@ -235,7 +251,7 @@ public class BLEManager {
 
                     if (findRx && findTx){
 
-                        mBluetoothTxCharacter.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+                        mBluetoothTxCharacter.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
 
                         gatt.setCharacteristicNotification(mBluetoothRxCharacter,true);
 
@@ -256,28 +272,18 @@ public class BLEManager {
                 }
 
                 if (!findRx || !findTx){
-                    if (mBleCallback != null){
-                        mBleCallback.updateConnDevStatus(BlEDEV_FindCharacteristicsFailed);
-                    }
-
-                    synchronized (mConnectDoneLockObject) {
-                        Log.i(TAG, "Find characteristics failed!");
-                        mConnectDoneLockObject.notify();
-                    }
-
+                    Log.i(TAG, "Find tx/rx characteristic failed");
+                    gatt.getServices();
                 }
             }
 
             if (!findService){
-                if (mBleCallback != null){
-                    mBleCallback.updateConnDevStatus(BlEDEV_FindServiceFailed);
-                }
-
-                synchronized (mConnectDoneLockObject) {
-                    Log.i(TAG, "Find service failed!");
-                    mConnectDoneLockObject.notify();
-                }
+                Log.i(TAG, "Find service failed");
+                gatt.getServices();
             }
+
+
+
         }
 
         //呼叫mBluetoothGatt.readCharacteristic(characteristic)讀取資料回撥，在這裡面接收資料
@@ -316,23 +322,30 @@ public class BLEManager {
 
         }
 
-        //傳送資料後的回撥
+
         @Override
         public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
             super.onCharacteristicWrite(gatt, characteristic, status);
 
-            synchronized (mWriteDoneLockObject) {
-                mWriteDoneLockObject.notify();
-            }
             if (status != BluetoothGatt.GATT_SUCCESS){
-                if (mBleCallback!=null){
-                    mBleCallback.updateConnDevStatus(BlEDEV_WriteFailed);
-                    Log.i("BLEManager", "Write failed" + status);
+                Log.i(TAG, "Write failed" + status);
+
+                if (mLastSendData!=null) {
+                    Log.i(TAG, "Resend last data package");
+                    mBluetoothTxCharacter.setValue(mLastSendData);
+                    mBluetoothGatt.writeCharacteristic(mBluetoothTxCharacter);
                 }
+
                 return;
             }
 
-            Log.i("BLEManager", String.valueOf(SystemClock.uptimeMillis()) + " writ done");
+            synchronized (mWriteDoneLockObject) {
+                mSendRet = true;
+                mWriteDoneLockObject.notify();
+            }
+
+            Log.i(TAG, SystemClock.uptimeMillis() + " writ done");
+
         }
 
 
@@ -341,7 +354,17 @@ public class BLEManager {
             super.onCharacteristicChanged(gatt, characteristic);
 
             synchronized (mReadDoneLockObject) {
+                Log.i(TAG, SystemClock.uptimeMillis()  + "onCharacteristicChanged");
                 mRecvData = characteristic.getValue();
+
+                if (mRecvData!=null){
+                    String strMsg = "";
+                    for (byte b: mRecvData){
+                        strMsg += String.format("%x ", b);
+                    }
+                    Log.i(TAG,  "recv " + strMsg);
+                }
+
                 mReadDoneLockObject.notify();
             }
 
@@ -360,7 +383,7 @@ public class BLEManager {
                 mBleCallback.updateConnDevStatus(BlEDEV_ConnDone);
 
             synchronized (mConnectDoneLockObject) {
-                Log.i(TAG, "onDescriptorWrite");
+                Log.i(TAG, SystemClock.uptimeMillis() + " onDescriptorWrite");
                 mConnectDoneLockObject.notify();
             }
         }
@@ -386,6 +409,7 @@ public class BLEManager {
          */
     };
 
+    /*
     public void connectWithDevice(String devName, Context context){
         //this.stopScan();
         for(int i=0; i<mBleDevArrList.size(); i++){
@@ -399,6 +423,8 @@ public class BLEManager {
         }
     }
 
+     */
+
     public void disconnectWithDevice(){
         if (this.mBluetoothGatt != null){
             Log.i(TAG, "disconnectWithDevice");
@@ -406,78 +432,131 @@ public class BLEManager {
         }
     }
 
-    public synchronized void sendData(byte[] data){
-        this.mRecvData = null;
 
+    public boolean sendData(String str){
+        this.mRecvData = null;
+        return sendData(str.getBytes());
+    }
+
+    public boolean sendData(byte[] data){
+
+        mSendRet = false;
         if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
+            this.mRecvData = null;
+            this.mLastSendData = data;
+
             Log.i("BLEManager", "send data ");
             String strData = "";
             for(int i=0; i<data.length; i++){
                 strData += String.format("%d,", data[i]);
             }
-            Log.i("BLEManager", strData);
-            this.mBluetoothTxCharacter.setValue(data);
-            mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
+            Log.d("BLEManager", strData);
+
+            synchronized (mWriteDoneLockObject) {
+
+                int sendStartOffset = 0;
+                do {
+                    int sendEndOffset = sendStartOffset + 19;
+                    if (sendEndOffset > data.length){
+                        sendEndOffset = data.length - 1;
+                    }
+                    byte[] sendData = Arrays.copyOfRange(data, sendStartOffset, sendEndOffset);
+                    this.mBluetoothTxCharacter.setValue(sendData);
+                    mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
+
+                    try {
+                        mWriteDoneLockObject.wait(5000);
+
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    sendStartOffset += 19;
+                }while (sendStartOffset < data.length);
+            }
         }
+        return mSendRet;
     }
-
-
-    public synchronized void sendData(String str){
-        this.mRecvData = null;
-
-        if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
-            this.mBluetoothTxCharacter.setValue(str);
-            mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
-        }
-    }
-
-
 
     public byte[] sendCmdRecvData(String cmd){
         return sendCmdRecvData(cmd.getBytes());
     }
 
-    public byte[] sendCmdRecvData(byte[] cmd){
+    public byte[] sendCmdRecvData(byte[] data){
         String strMsg = "";
-        for (byte b: cmd){
+        for (byte b: data){
             strMsg += String.format("%x ", b);
         }
-        Log.i(TAG, "sendCmdRecvData " + strMsg);
+        Log.i(TAG, SystemClock.uptimeMillis()  +  " sendCmdRecvData " + strMsg);
 
+        this.mLastSendData = data;
         this.mRecvData = null;
 
         if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
 
+            mBluetoothTxCharacter = mBluetoothGatt
+                    .getService(UUID.fromString(ServiceUUID))
+                    .getCharacteristic(UUID.fromString(TXCharacteristicUUID));
+
             synchronized (mWriteDoneLockObject){
-                this.mBluetoothTxCharacter.setValue(cmd);
+                //this.mBluetoothTxCharacter.setValue(cmd);
+                /*
                 try {
                     Thread.sleep(300);
                 } catch (Exception ex) {
                     Log.e(TAG, "Command Delay Error", ex);
                 }
-                mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
+
+                 */
+                //mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
 
 
+                int sendStartOffset = 0;
+                do {
+                    int sendEndOffset = sendStartOffset + 20;
+                    if (sendEndOffset > data.length){
+                        sendEndOffset = data.length;
+                    }
+                    byte[] sendData = Arrays.copyOfRange(data, sendStartOffset, sendEndOffset);
 
-                try {
-                    mWriteDoneLockObject.wait(5000);
+                    strMsg = "";
+                    for (byte b: sendData){
+                        strMsg += String.format("%x ", b);
+                    }
+                    Log.i(TAG, "send data: " + strMsg);
 
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+                    this.mBluetoothTxCharacter.setValue(sendData);
+                    mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
+
+                    try {
+                        mWriteDoneLockObject.wait(5000);
+
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    sendStartOffset += 20;
+                }while (sendStartOffset < data.length);
+
             }
 
             //BluetoothGattCharacteristic blechar = mBluetoothGatt.getService(UUID.fromString(BLEManager.ServiceUUID)).getCharacteristic(UUID.fromString(BLEManager.RXCharacteristicUUID));
             //boolean ret = mBluetoothGatt.readCharacteristic(this.mBluetoothRxCharacter);
 
-            synchronized (mReadDoneLockObject){
-                try {
-                    mReadDoneLockObject.wait(5000);
+            Log.i(TAG, SystemClock.uptimeMillis() + " wait for reply");
 
-                }catch (InterruptedException e){
-                    e.printStackTrace();
+            synchronized (mReadDoneLockObject){
+                if (mRecvData==null) {
+                    try {
+                        mReadDoneLockObject.wait(5000);
+
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
+
+            Log.i(TAG, SystemClock.uptimeMillis() + " got reply");
+
+
 
         }
 
