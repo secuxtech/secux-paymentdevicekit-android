@@ -8,10 +8,12 @@ import androidx.recyclerview.widget.StaggeredGridLayoutManager;
 import android.Manifest;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Base64;
 import android.util.Log;
 import android.util.Pair;
 import android.view.Gravity;
@@ -21,8 +23,11 @@ import android.widget.Toast;
 
 import com.secuxtech.paymentdevicekit.BLEDevice;
 import com.secuxtech.paymentdevicekit.BLEManagerCallback;
+import com.secuxtech.paymentdevicekit.MachineIoControlParam;
 import com.secuxtech.paymentdevicekit.PaymentPeripheralManager;
 import com.secuxtech.paymentdevicekit.SecuXBLEManager;
+
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
             SecuXBLEManager.getInstance().setBleCallback(mBLECallback);
+
             SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE));
             if (!SecuXBLEManager.getInstance().isBleEnabled()){
                 Log.i("BaseActivity", "BLE is not enabled!!");
@@ -69,23 +75,59 @@ public class MainActivity extends AppCompatActivity {
             }else{
                 //BLEManager.getInstance().setBleCallback(bleCallback);
             }
+
+
         }else{
             Toast.makeText(this, "The phone DOES NOT support BLE!", Toast.LENGTH_SHORT).show();
         }
 
-/*
+
         new Thread(new Runnable() {
             @Override
             public void run() {
                 PaymentPeripheralManager peripheralManager = new PaymentPeripheralManager();
                 peripheralManager.doGetIVKey(mContext, 10000, "4ab10000726b", -80, 10000);
                 //peripheralManager.doGetIVKey(mContext, 10000, "001a00000048", -80, 10000);
+
+                try {
+                    JSONObject ioCtrlParamJson = new JSONObject("{\"uart\":\"0\",\"gpio1\":\"0\",\"gpio2\":\"0\",\"gpio31\":\"0\",\"gpio32\":\"0\",\"gpio4\":\"0\",\"gpio4c\":\"0\",\"gpio4cInterval\":\"0\",\"gpio4cCount\":\"0\",\"gpio4dOn\":\"0\",\"gpio4dOff\":\"0\",\"gpio4dInterval\":\"0\",\"runStatus\":\"0\",\"lockStatus\":\"0\"}");
+
+                    final MachineIoControlParam machineIoControlParam = new MachineIoControlParam();
+                    machineIoControlParam.setGpio1(ioCtrlParamJson.getString("gpio1"));
+                    machineIoControlParam.setGpio2(ioCtrlParamJson.getString("gpio2"));
+                    machineIoControlParam.setGpio31(ioCtrlParamJson.getString("gpio31"));
+                    machineIoControlParam.setGpio32(ioCtrlParamJson.getString("gpio32"));
+                    machineIoControlParam.setGpio4(ioCtrlParamJson.getString("gpio4"));
+                    machineIoControlParam.setGpio4c(ioCtrlParamJson.getString("gpio4c"));
+                    machineIoControlParam.setGpio4cCount(ioCtrlParamJson.getString("gpio4cCount"));
+                    machineIoControlParam.setGpio4cInterval(ioCtrlParamJson.getString("gpio4cInterval"));
+                    machineIoControlParam.setGpio4dOn(ioCtrlParamJson.getString("gpio4dOn"));
+                    machineIoControlParam.setGpio4dOff(ioCtrlParamJson.getString("gpio4dOff"));
+                    machineIoControlParam.setGpio4dInterval(ioCtrlParamJson.getString("gpio4dInterval"));
+                    machineIoControlParam.setUart(ioCtrlParamJson.getString("uart"));
+                    machineIoControlParam.setRunStatus(ioCtrlParamJson.getString("runStatus"));
+                    machineIoControlParam.setLockStatus(ioCtrlParamJson.getString("lockStatus"));
+
+                    String encryptedStr = "91sGnngVALh6Ep3RsEJKhGQEQM2ntJiZxR0cwiQNLT\\/SbZcCVux1WHabIrzqkICsPz3PudpRHnEFwcbiMO7qhA==";
+                    final byte[] encryptedData = Base64.decode(encryptedStr, Base64.DEFAULT);
+                    Pair<Integer, String> ret = peripheralManager.doPaymentVerification(encryptedData, machineIoControlParam);
+                    if (ret.first != 0) {
+                        Log.i(TAG, ret.second);
+                    }else{
+                        Log.i(TAG, "Payment done");
+                    }
+                }catch (Exception e){
+
+                }
             }
         }).start();
 
 
 
- */
+
+
+
+/*
 
         SecuXBLEManager.getInstance().startScan();
 
@@ -93,6 +135,10 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new StaggeredGridLayoutManager(1, StaggeredGridLayoutManager.VERTICAL));
 
 
+ */
+
+
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }
 
     public void onRescanButtonClick(View v){
