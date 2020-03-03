@@ -1,6 +1,7 @@
 package com.secuxtech.paymentdevicekit;
 
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.os.SystemClock;
 import android.util.Log;
@@ -78,6 +79,7 @@ public class PaymentPeripheralManager {
         Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
 
         SecuXBLEManager.getInstance().mContext = context;
+        SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE));
 
         Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().findTheDevice(connectDeviceId, scanTimeout, checkRSSI);
         if (devInfo.first==null || devInfo.second==null){
@@ -101,11 +103,11 @@ public class PaymentPeripheralManager {
                 if (paymentPeripheral.isActivated()) {
                     Log.i(TAG, "device is activated! " + recvData.toString());
                     if (paymentPeripheral.isValidPeripheralIvKey(recvData)) {
-                        Log.d(TAG, "true__" + recvData.toString());
+                        Log.d(TAG, SystemClock.uptimeMillis()  + " recv: " + recvData.toString());
                         byte[] ivKeyData = Arrays.copyOfRange(recvData, 5, recvData.length);
                         String ivKey = dataToHexString(ivKeyData);
                         ivKey = ivKey.toUpperCase();
-                        Log.d(TAG, ivKey);
+                        Log.d(TAG, SystemClock.uptimeMillis()  + " " + ivKey);
 
                         ret = new Pair<>(SecuX_Peripheral_Operation_OK, ivKey);
 
@@ -137,6 +139,7 @@ public class PaymentPeripheralManager {
         Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
 
         SecuXBLEManager.getInstance().mContext = context;
+        SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE));
 
         Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().scanForTheDevice(connectDeviceId, scanTimeout, checkRSSI);
         if (devInfo.first==null || devInfo.second==null){
@@ -168,7 +171,6 @@ public class PaymentPeripheralManager {
 
                         ret = new Pair<>(SecuX_Peripheral_Operation_OK, ivKey);
 
-
                     } else {
                         Log.i(TAG, "Invalid peripheral ivkey");
                         ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid peripheral ivkey");
@@ -193,60 +195,73 @@ public class PaymentPeripheralManager {
         return ret;
     }
 
-    public void doPaymentVerification(byte[] encryptedTransactionData, MachineIoControlParam machineControlParam) {
+    public Pair<Integer, String>  doPaymentVerification(byte[] encryptedTransactionData, MachineIoControlParam machineControlParam) {
         Map<String, String> ioControlParams = this.getIoControlParamMap(machineControlParam);
-        this.doPaymentVerification(encryptedTransactionData, ioControlParams);
+        return this.doPaymentVerification(encryptedTransactionData, ioControlParams);
     }
 
-    public void doPaymentVerification(byte[] encryptedTransactionData, final Map<String, String> machineControlParams) {
-        //Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
+    public Pair<Integer, String>  doPaymentVerification(byte[] encryptedTransactionData, final Map<String, String> machineControlParams) {
 
         Map<String, Integer> ioControlParams = new HashMap<String, Integer>();
         ioControlParams.put("uart", 0);
         ioControlParams.put("relay", 0);
 
         byte[] sendData = getEncryptPaymentData(encryptedTransactionData, ioControlParams);
+        if (sendData == null){
+            SecuXBLEManager.getInstance().disconnectWithDevice();
+            return new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid transaction data");
+        }
+
+        Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
         byte[] recvData = SecuXBLEManager.getInstance().sendCmdRecvData(sendData);
         if (recvData!=null && recvData.length>0) {
             try {
                 String responseString = new String(recvData, "UTF-8");
 
                 if (responseString.charAt(0) == 'E') {
-                    //ret = new Pair<>(SecuX_Peripheral_Operation_fail, responseString);
-                    //return ret;
+                    ret = new Pair<>(SecuX_Peripheral_Operation_fail, responseString);
+                }else {
 
-                    return;
+                    byte[] returnMoneyData = Arrays.copyOfRange(recvData, 0, 8);
+
+                    //NSData *returnMoneyData = [returnData subdataWithRange:NSMakeRange(0, 5)];
+                    String returnMoneyString = new String(returnMoneyData, "UTF-8");
+                    Log.d("returnMoneyString", returnMoneyString);
+                    //NSString *returnMoney = [NSString stringWithUTF8String:[returnMoneyData bytes]];
+
+                    byte[] sequenceNumData = Arrays.copyOfRange(recvData, 8, 9);
+                    int sequenceNumInt = (sequenceNumData[0] & 0xFF);
+                    //NSData *sequenceNoData = [returnData subdataWithRange:NSMakeRange(5, 1)];
+                    //int sequenceNumInt = getTwoByteInteger(sequenceNumData);
+                    String sequenceNumString = "" + sequenceNumInt;//new String(sequenceNumData, "UTF-8");
+                    //int *b = (int *)sequenceNoData.bytes;
+                    //NSString *sequenceNoStr = [NSString stringWithFormat:@"%d",*b];
+
+                    final Map<String, Object> dataMap = new HashMap<>();
+                    dataMap.put("amount", returnMoneyString);
+                    dataMap.put("sequenceNo", sequenceNumString);
+
+                    byte[] machineControlData = getMachineControlData(machineControlParams);
+                    byte[] reply = SecuXBLEManager.getInstance().sendCmdRecvData(machineControlData);
+                    if (reply != null && reply.length > 0) {
+                        responseString = new String(recvData, "UTF-8");
+
+                        if (responseString.charAt(0) == 'E') {
+                            ret = new Pair<>(SecuX_Peripheral_Operation_fail, responseString);
+                        } else {
+                            ret = new Pair<>(SecuX_Peripheral_Operation_OK, "");
+                        }
+                    }
                 }
-
-                byte[] returnMoneyData = Arrays.copyOfRange(recvData, 0, 8);
-
-                //NSData *returnMoneyData = [returnData subdataWithRange:NSMakeRange(0, 5)];
-                String returnMoneyString = new String(returnMoneyData, "UTF-8");
-                Log.d("returnMoneyString",returnMoneyString);
-                //NSString *returnMoney = [NSString stringWithUTF8String:[returnMoneyData bytes]];
-
-                byte[] sequenceNumData = Arrays.copyOfRange(recvData, 8, 9);
-                int sequenceNumInt = (sequenceNumData[0] & 0xFF);
-                //NSData *sequenceNoData = [returnData subdataWithRange:NSMakeRange(5, 1)];
-                //int sequenceNumInt = getTwoByteInteger(sequenceNumData);
-                String sequenceNumString = "" + sequenceNumInt;//new String(sequenceNumData, "UTF-8");
-                //int *b = (int *)sequenceNoData.bytes;
-                //NSString *sequenceNoStr = [NSString stringWithFormat:@"%d",*b];
-
-                final Map<String, Object> dataMap = new HashMap<>();
-                dataMap.put("amount", returnMoneyString);
-                dataMap.put("sequenceNo", sequenceNumString);
-
-                byte[] machineControlData = getMachineControlData(machineControlParams);
             }catch (Exception e){
-                //ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid response from device");
+                ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid response from device");
             }
 
         }else{
-            //ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Receive response from device timeout");
+            ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Receive response from device timeout");
         }
 
-        //return ret;
+        return ret;
     }
 
     private static String dataToHexString(byte[] bytes) {
@@ -363,8 +378,6 @@ public class PaymentPeripheralManager {
             Log.d("CryptCommand", ex.getMessage());
             data = null;
         }
-
-
 
         return data;
     }
