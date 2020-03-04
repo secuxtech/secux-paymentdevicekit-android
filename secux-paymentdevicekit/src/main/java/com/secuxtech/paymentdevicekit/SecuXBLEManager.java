@@ -3,6 +3,7 @@ package com.secuxtech.paymentdevicekit;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.os.SystemClock;
 import android.util.Log;
@@ -123,6 +124,7 @@ public class SecuXBLEManager extends BLEManager{
                 if (rssi < mScanRSSI)
                     return;
 
+                ScanRecord scanRecord = result.getScanRecord();
                 byte[] scanResult = result.getScanRecord().getBytes();
 
                 BluetoothDevice device = result.getDevice();
@@ -132,7 +134,7 @@ public class SecuXBLEManager extends BLEManager{
 
                 boolean bFindDev = false;
                 if (device!=null && scanResult!=null && scanResult.length>0){ // && device.getName()!=null && device.getName().length()!=0){
-                    //Log.i(TAG, "device " + device.getName() );
+                    Log.i(TAG, "device " + scanRecord.getDeviceName() );
 
                     for (int i = 0; i < mBleDevArrList.size(); i++) {
                         //System.out.println(cars.get(i));
