@@ -354,16 +354,10 @@ public class BLEManager {
             super.onCharacteristicChanged(gatt, characteristic);
 
             synchronized (mReadDoneLockObject) {
-                Log.i(TAG, SystemClock.uptimeMillis()  + "onCharacteristicChanged");
+                Log.i(TAG, SystemClock.uptimeMillis()  + " onCharacteristicChanged");
                 mRecvData = characteristic.getValue();
 
-                if (mRecvData!=null){
-                    String strMsg = "";
-                    for (byte b: mRecvData){
-                        strMsg += String.format("%x ", b);
-                    }
-                    Log.i(TAG,  "recv " + strMsg);
-                }
+                logByteArrayHexValue(mRecvData);
 
                 mReadDoneLockObject.notify();
             }
@@ -446,11 +440,7 @@ public class BLEManager {
             this.mLastSendData = data;
 
             Log.i("BLEManager", "send data ");
-            String strData = "";
-            for(int i=0; i<data.length; i++){
-                strData += String.format("%d,", data[i]);
-            }
-            Log.d("BLEManager", strData);
+            logByteArrayHexValue(data);
 
             synchronized (mWriteDoneLockObject) {
 
@@ -482,11 +472,9 @@ public class BLEManager {
     }
 
     public byte[] sendCmdRecvData(byte[] data){
-        String strMsg = "";
-        for (byte b: data){
-            strMsg += String.format("%x ", b);
-        }
-        Log.i(TAG, SystemClock.uptimeMillis()  +  " sendCmdRecvData " + strMsg);
+
+        Log.i(TAG, SystemClock.uptimeMillis()  +  " sendCmdRecvData ");
+        logByteArrayHexValue(data);
 
         this.mLastSendData = data;
         this.mRecvData = null;
@@ -518,11 +506,9 @@ public class BLEManager {
                     }
                     byte[] sendData = Arrays.copyOfRange(data, sendStartOffset, sendEndOffset);
 
-                    strMsg = "";
-                    for (byte b: sendData){
-                        strMsg += String.format("%x ", b);
-                    }
-                    Log.i(TAG, "send data: " + strMsg);
+
+                    Log.i(TAG, "send data");
+                    logByteArrayHexValue(sendData);
 
                     this.mBluetoothTxCharacter.setValue(sendData);
                     mBluetoothGatt.writeCharacteristic(this.mBluetoothTxCharacter);
@@ -557,9 +543,20 @@ public class BLEManager {
             Log.i(TAG, SystemClock.uptimeMillis() + " got reply");
 
 
-
         }
 
         return mRecvData;
+    }
+
+    private void logByteArrayHexValue(byte[] data){
+        if (data!=null){
+            String strMsg = "";
+            for (byte b: data){
+                strMsg += String.format("0x%x ", b);
+            }
+            Log.i(TAG,  strMsg);
+        }else{
+            Log.i(TAG, "Null data");
+        }
     }
 }
