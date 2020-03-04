@@ -242,6 +242,35 @@ public class PaymentPeripheralManager {
                     dataMap.put("sequenceNo", sequenceNumString);
 
                     byte[] machineControlData = getMachineControlData(machineControlParams);
+                    int sendStartOffset = 0;
+                    do {
+                        int sendEndOffset = sendStartOffset + 20;
+                        if (sendEndOffset > machineControlData.length) {
+                            sendEndOffset = machineControlData.length;
+                        }
+                        byte[] ioConfigData = Arrays.copyOfRange(machineControlData, sendStartOffset, sendEndOffset);
+
+                        if (ioConfigData[0] == 0x74){
+                            SecuXBLEManager.getInstance().sendData(ioConfigData);
+                        }else {
+                            byte[] reply = SecuXBLEManager.getInstance().sendCmdRecvData(ioConfigData);
+                            if (reply != null && reply.length > 0) {
+                                responseString = new String(recvData, "UTF-8");
+
+                                if (responseString.charAt(0) == 'E') {
+                                    ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid io config response from device");
+                                    break;
+                                }
+                            }
+                        }
+
+                        sendStartOffset += 20;
+                    }while (sendStartOffset < machineControlData.length);
+
+                    if (sendStartOffset >= machineControlData.length){
+                        ret = new Pair<>(SecuX_Peripheral_Operation_OK, "");
+                    }
+                    /*
                     byte[] reply = SecuXBLEManager.getInstance().sendCmdRecvData(machineControlData);
                     if (reply != null && reply.length > 0) {
                         responseString = new String(recvData, "UTF-8");
@@ -252,15 +281,18 @@ public class PaymentPeripheralManager {
                             ret = new Pair<>(SecuX_Peripheral_Operation_OK, "");
                         }
                     }
+
+                     */
                 }
             }catch (Exception e){
-                ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid response from device");
+                ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid payment amount response from device");
             }
 
         }else{
             ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Receive response from device timeout");
         }
 
+        SecuXBLEManager.getInstance().disconnectWithDevice();
         return ret;
     }
 
