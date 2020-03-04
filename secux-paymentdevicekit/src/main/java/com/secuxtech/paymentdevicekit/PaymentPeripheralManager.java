@@ -75,22 +75,22 @@ public class PaymentPeripheralManager {
      */
 
     public Pair<Integer, String> doGetIVKeyWithoutStartScan(Context context, long scanTimeout, String connectDeviceId, int checkRSSI, final int connectionTimeout) {
-        Log.i(TAG, "doGetIVKeyWithoutStartScan");
+        Log.i(TAG, SystemClock.uptimeMillis() + "doGetIVKeyWithoutStartScan");
         Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
 
         SecuXBLEManager.getInstance().mContext = context;
         SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE));
 
-        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().findTheDevice(connectDeviceId, scanTimeout, checkRSSI);
+        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().findTheDevice(connectDeviceId, scanTimeout*1000, checkRSSI);
         if (devInfo.first==null || devInfo.second==null){
             //SecuXBLEManager.getInstance().stopScan();
-            Log.i(TAG, "find device failed!");
+            Log.i(TAG, SystemClock.uptimeMillis() + "find device failed!");
             ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Can't find device");
             return ret;
         }
 
         Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " find the device");
-        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout)){
+        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout*1000)){
             Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " Connect with the device done!");
             //com.secux.payment.cpp.MyNDK myNDK = new com.secux.payment.cpp.MyNDK();
             //final byte[] validatePeripheralCommand = myNDK.getValidatePeripheralCommand(connectionTimeout, devInfo.second);
@@ -104,7 +104,7 @@ public class PaymentPeripheralManager {
                     Log.i(TAG, "device is activated! " + recvData.toString());
                     if (paymentPeripheral.isValidPeripheralIvKey(recvData)) {
                         Log.d(TAG, SystemClock.uptimeMillis()  + " recv: " + recvData.toString());
-                        byte[] ivKeyData = Arrays.copyOfRange(recvData, 5, recvData.length);
+                        ivKeyData = Arrays.copyOfRange(recvData, 5, recvData.length);
                         String ivKey = dataToHexString(ivKeyData);
                         ivKey = ivKey.toUpperCase();
                         Log.d(TAG, SystemClock.uptimeMillis()  + " " + ivKey);
@@ -115,33 +115,37 @@ public class PaymentPeripheralManager {
                     } else {
                         Log.i(TAG, "Invalid peripheral ivkey");
                         ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid peripheral ivkey");
+                        SecuXBLEManager.getInstance().disconnectWithDevice();
                     }
                 } else {
                     Log.i(TAG, "device is not activated!");
                     ret = new Pair<>(SecuX_Peripheral_Operation_fail, "device is not activated");
+                    SecuXBLEManager.getInstance().disconnectWithDevice();
                 }
             }else{
                 Log.i(TAG, String.valueOf(SystemClock.uptimeMillis())  + " receive data failed!");
                 ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Receive data timeout");
+                SecuXBLEManager.getInstance().disconnectWithDevice();
             }
 
-            SecuXBLEManager.getInstance().disconnectWithDevice();
+
         }else{
-            Log.i(TAG, "connect with the device failed!");
+            Log.i(TAG, SystemClock.uptimeMillis() + "connect with the device failed!");
             ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Connect with device timeout");
+
         }
 
 
         return ret;
     }
 
-    public Pair<Integer, String> doGetIVKey(Context context, long scanTimeout, String connectDeviceId, int checkRSSI, final int connectionTimeout) {
+    public Pair<Integer, String> doGetIVKey(Context context, int scanTimeout, String connectDeviceId, int checkRSSI, final int connectionTimeout) {
         Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
 
         SecuXBLEManager.getInstance().mContext = context;
         SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE));
 
-        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().scanForTheDevice(connectDeviceId, scanTimeout, checkRSSI);
+        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().scanForTheDevice(connectDeviceId, scanTimeout*1000, checkRSSI);
         if (devInfo.first==null || devInfo.second==null){
             //SecuXBLEManager.getInstance().stopScan();
             Log.i(TAG, "find device failed!");
@@ -150,7 +154,7 @@ public class PaymentPeripheralManager {
         }
 
         Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " find the device");
-        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout)){
+        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout*1000)){
             Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " Connect with the device done!");
             //com.secux.payment.cpp.MyNDK myNDK = new com.secux.payment.cpp.MyNDK();
             //final byte[] validatePeripheralCommand = myNDK.getValidatePeripheralCommand(connectionTimeout, devInfo.second);
@@ -187,7 +191,7 @@ public class PaymentPeripheralManager {
                 SecuXBLEManager.getInstance().disconnectWithDevice();
             }
         }else{
-            Log.i(TAG, "connect with the device failed!");
+            Log.i(TAG, SystemClock.uptimeMillis() + "connect with the device failed!");
             ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Connect with device timeout");
         }
 
@@ -242,6 +246,7 @@ public class PaymentPeripheralManager {
                     dataMap.put("sequenceNo", sequenceNumString);
 
                     byte[] machineControlData = getMachineControlData(machineControlParams);
+                    /*
                     int sendStartOffset = 0;
                     do {
                         int sendEndOffset = sendStartOffset + 20;
@@ -250,17 +255,13 @@ public class PaymentPeripheralManager {
                         }
                         byte[] ioConfigData = Arrays.copyOfRange(machineControlData, sendStartOffset, sendEndOffset);
 
-                        if (ioConfigData[0] == 0x74){
-                            SecuXBLEManager.getInstance().sendData(ioConfigData);
-                        }else {
-                            byte[] reply = SecuXBLEManager.getInstance().sendCmdRecvData(ioConfigData);
-                            if (reply != null && reply.length > 0) {
-                                responseString = new String(recvData, "UTF-8");
+                        byte[] reply = SecuXBLEManager.getInstance().sendCmdRecvData(ioConfigData);
+                        if (reply != null && reply.length > 0) {
+                            responseString = new String(recvData, "UTF-8");
 
-                                if (responseString.charAt(0) == 'E') {
-                                    ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid io config response from device");
-                                    break;
-                                }
+                            if (responseString.charAt(0) == 'E') {
+                                ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid io config response from device");
+                                break;
                             }
                         }
 
@@ -270,7 +271,9 @@ public class PaymentPeripheralManager {
                     if (sendStartOffset >= machineControlData.length){
                         ret = new Pair<>(SecuX_Peripheral_Operation_OK, "");
                     }
-                    /*
+
+                     */
+
                     byte[] reply = SecuXBLEManager.getInstance().sendCmdRecvData(machineControlData);
                     if (reply != null && reply.length > 0) {
                         responseString = new String(recvData, "UTF-8");
@@ -282,7 +285,7 @@ public class PaymentPeripheralManager {
                         }
                     }
 
-                     */
+
                 }
             }catch (Exception e){
                 ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Invalid payment amount response from device");
