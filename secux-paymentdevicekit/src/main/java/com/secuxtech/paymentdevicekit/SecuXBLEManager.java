@@ -134,7 +134,7 @@ public class SecuXBLEManager extends BLEManager{
 
                 boolean bFindDev = false;
                 if (device!=null && scanResult!=null && scanResult.length>0){ // && device.getName()!=null && device.getName().length()!=0){
-                    Log.i(TAG, "device " + scanRecord.getDeviceName() );
+                    //Log.i(TAG, "device " + scanRecord.getDeviceName() );
 
                     for (int i = 0; i < mBleDevArrList.size(); i++) {
                         //System.out.println(cars.get(i));
