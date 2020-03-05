@@ -435,11 +435,15 @@ public class BLEManager {
     public boolean sendData(byte[] data){
 
         mSendRet = false;
-        if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
+        if (this.mBluetoothGatt != null){ // && this.mBluetoothTxCharacter!=null){
             this.mRecvData = null;
             this.mLastSendData = data;
 
-            Log.i("BLEManager", "send data ");
+            mBluetoothTxCharacter = mBluetoothGatt
+                    .getService(UUID.fromString(ServiceUUID))
+                    .getCharacteristic(UUID.fromString(TXCharacteristicUUID));
+
+            Log.i(TAG, "send data ");
             logByteArrayHexValue(data);
 
             synchronized (mWriteDoneLockObject) {
@@ -479,7 +483,7 @@ public class BLEManager {
         this.mLastSendData = data;
         this.mRecvData = null;
 
-        if (this.mBluetoothGatt != null && this.mBluetoothTxCharacter!=null){
+        if (this.mBluetoothGatt != null){ // && this.mBluetoothTxCharacter!=null){
 
             mBluetoothTxCharacter = mBluetoothGatt
                     .getService(UUID.fromString(ServiceUUID))
