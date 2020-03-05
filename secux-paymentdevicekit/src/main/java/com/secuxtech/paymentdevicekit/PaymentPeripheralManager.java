@@ -140,6 +140,7 @@ public class PaymentPeripheralManager {
     }
 
     public Pair<Integer, String> doGetIVKey(Context context, int scanTimeout, String connectDeviceId, int checkRSSI, final int connectionTimeout) {
+        Log.i(TAG, SystemClock.uptimeMillis() + " doGetIVKey scanTimeout=" + scanTimeout + " connectionTimeout=" + connectionTimeout + " Rssi=" + checkRSSI);
         Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
 
         SecuXBLEManager.getInstance().mContext = context;
