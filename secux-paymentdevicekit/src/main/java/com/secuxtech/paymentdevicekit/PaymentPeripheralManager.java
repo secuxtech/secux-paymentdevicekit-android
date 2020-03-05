@@ -74,14 +74,14 @@ public class PaymentPeripheralManager {
 
      */
 
-    public Pair<Integer, String> doGetIVKeyWithoutStartScan(Context context, long scanTimeout, String connectDeviceId, int checkRSSI, final int connectionTimeout) {
-        Log.i(TAG, SystemClock.uptimeMillis() + "doGetIVKeyWithoutStartScan");
+    public Pair<Integer, String> doGetIVKeyWithoutStartScan(Context context, int scanTimeout, String connectDeviceId, int checkRSSI, final int connectionTimeout) {
+        Log.i(TAG, SystemClock.uptimeMillis() + " doGetIVKeyWithoutStartScan scanTimeout=" + scanTimeout + " connectionTimeout=" + connectionTimeout + " Rssi=" + checkRSSI);
         Pair<Integer, String> ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Unknown reason");
 
         SecuXBLEManager.getInstance().mContext = context;
         SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE));
 
-        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().findTheDevice(connectDeviceId, scanTimeout*1000, checkRSSI);
+        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().findTheDevice(connectDeviceId, scanTimeout, checkRSSI, connectionTimeout);
         if (devInfo.first==null || devInfo.second==null){
             //SecuXBLEManager.getInstance().stopScan();
             Log.i(TAG, SystemClock.uptimeMillis() + "find device failed!");
@@ -90,7 +90,7 @@ public class PaymentPeripheralManager {
         }
 
         Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " find the device");
-        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout*1000)){
+        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, scanTimeout)){
             Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " Connect with the device done!");
             //com.secux.payment.cpp.MyNDK myNDK = new com.secux.payment.cpp.MyNDK();
             //final byte[] validatePeripheralCommand = myNDK.getValidatePeripheralCommand(connectionTimeout, devInfo.second);
@@ -145,7 +145,7 @@ public class PaymentPeripheralManager {
         SecuXBLEManager.getInstance().mContext = context;
         SecuXBLEManager.getInstance().setBLEManager((BluetoothManager) context.getSystemService(Context.BLUETOOTH_SERVICE));
 
-        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().scanForTheDevice(connectDeviceId, scanTimeout*1000, checkRSSI);
+        Pair<BluetoothDevice, PaymentPeripheral> devInfo = SecuXBLEManager.getInstance().scanForTheDevice(connectDeviceId, scanTimeout, checkRSSI, connectionTimeout);
         if (devInfo.first==null || devInfo.second==null){
             //SecuXBLEManager.getInstance().stopScan();
             Log.i(TAG, "find device failed!");
@@ -154,7 +154,7 @@ public class PaymentPeripheralManager {
         }
 
         Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " find the device");
-        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, connectionTimeout*1000)){
+        if (SecuXBLEManager.getInstance().connectWithDevice(devInfo.first, scanTimeout)){
             Log.i(TAG, String.valueOf(SystemClock.uptimeMillis()) + " Connect with the device done!");
             //com.secux.payment.cpp.MyNDK myNDK = new com.secux.payment.cpp.MyNDK();
             //final byte[] validatePeripheralCommand = myNDK.getValidatePeripheralCommand(connectionTimeout, devInfo.second);

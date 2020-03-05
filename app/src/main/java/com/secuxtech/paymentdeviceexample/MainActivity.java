@@ -104,8 +104,6 @@ public class MainActivity extends AppCompatActivity {
         recyclerView.setLayoutManager(new StaggeredGridLayoutManager(1, StaggeredGridLayoutManager.VERTICAL));
 
 
-
-
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }
 
@@ -211,7 +209,7 @@ public class MainActivity extends AppCompatActivity {
 
             PaymentPeripheralManager peripheralManager = new PaymentPeripheralManager();
             //peripheralManager.doGetIVKey(mContext, 10000, "4ab10000726b", -80, 10000);
-            Pair<Integer, String> getIVKeyret = peripheralManager.doGetIVKeyWithoutStartScan(mContext, 10, devID, -80, 10);
+            Pair<Integer, String> getIVKeyret = peripheralManager.doGetIVKeyWithoutStartScan(mContext, 10, devID, -80, 30);
             String ivKey = "";
             if (getIVKeyret.first == SecuX_Peripheral_Operation_OK) {
                 ivKey = getIVKeyret.second;

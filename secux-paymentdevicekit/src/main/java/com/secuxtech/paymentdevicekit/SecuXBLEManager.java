@@ -38,6 +38,7 @@ public class SecuXBLEManager extends BLEManager{
 
     private String mDeviceID = "";
     private int mScanRSSI = -90;
+    private int mConnectionTimeout = 30;  //seconds
 
     private PaymentPeripheral mPaymentPeripheral = null;
     private byte[] mValidatePeripheralCommand = null;
@@ -48,17 +49,18 @@ public class SecuXBLEManager extends BLEManager{
         return mValidatePeripheralCommand;
     }
 
-    public Pair<BluetoothDevice, PaymentPeripheral> scanForTheDevice(String devID, long timeout, int rssi){
+    public Pair<BluetoothDevice, PaymentPeripheral> scanForTheDevice(String devID, int scanTimeout, int rssi, int connectionTimeout){
         synchronized (mScanDevDoneLockObject) {
             mDeviceID = devID;
             mPaymentPeripheral = null;
             mDevice = null;
             mValidatePeripheralCommand = null;
             mScanRSSI = rssi;
+            mConnectionTimeout = connectionTimeout;
 
             startScan(false);
             try{
-                mScanDevDoneLockObject.wait(timeout);
+                mScanDevDoneLockObject.wait(scanTimeout*1000);
             }catch (InterruptedException e){
                 e.printStackTrace();
             }
@@ -67,7 +69,7 @@ public class SecuXBLEManager extends BLEManager{
         return new Pair<>(mDevice, mPaymentPeripheral);
     }
 
-    public Pair<BluetoothDevice, PaymentPeripheral> findTheDevice(String devID, long timeout, int rssi){
+    public Pair<BluetoothDevice, PaymentPeripheral> findTheDevice(String devID, int timeout, int rssi, int connectionTimeout){
         synchronized (mScanDevDoneLockObject) {
             mDeviceID = devID;
             mPaymentPeripheral = null;
@@ -75,8 +77,9 @@ public class SecuXBLEManager extends BLEManager{
             mValidatePeripheralCommand = null;
             mScanRSSI = rssi;
             mScanWithCallbackFlag = false;
+            mConnectionTimeout = connectionTimeout;
             try{
-                mScanDevDoneLockObject.wait(timeout);
+                mScanDevDoneLockObject.wait(timeout*1000);
             }catch (InterruptedException e){
                 e.printStackTrace();
             }
@@ -91,7 +94,7 @@ public class SecuXBLEManager extends BLEManager{
         startScan(true);
     }
 
-    public boolean connectWithDevice(BluetoothDevice device, long connectTimeout){
+    public boolean connectWithDevice(BluetoothDevice device, int connectTimeout){
         if (mContext!=null){
 
             synchronized (mConnectDoneLockObject) {
@@ -104,7 +107,7 @@ public class SecuXBLEManager extends BLEManager{
                 this.mBluetoothGatt = device.connectGatt(mContext, false, mBluetoothGattCallback);
 
                 try{
-                    mConnectDoneLockObject.wait(connectTimeout);
+                    mConnectDoneLockObject.wait(connectTimeout*1000);
                 }catch (InterruptedException e){
                     e.printStackTrace();
                 }
@@ -192,7 +195,7 @@ public class SecuXBLEManager extends BLEManager{
                                     dev.deviceID = uid;
 
                                     if (uid.compareToIgnoreCase(mDeviceID)==0){
-                                        mValidatePeripheralCommand = mNdk.getValidatePeripheralCommand(60, paymentPeripheral);
+                                        mValidatePeripheralCommand = mNdk.getValidatePeripheralCommand(mConnectionTimeout, paymentPeripheral);
 
                                         strMsg = "";
                                         for (byte b: mValidatePeripheralCommand){
