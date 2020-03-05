@@ -182,7 +182,7 @@ public class PaymentPeripheralManager {
                     }
                 } else {
                     Log.i(TAG, "device is not activated!");
-                    ret = new Pair<>(SecuX_Peripheral_Operation_fail, "device is not activated");
+                    ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Device is not activated");
                     SecuXBLEManager.getInstance().disconnectWithDevice();
                 }
             }else{
@@ -279,7 +279,7 @@ public class PaymentPeripheralManager {
                         responseString = new String(recvData, "UTF-8");
 
                         if (responseString.charAt(0) == 'E') {
-                            ret = new Pair<>(SecuX_Peripheral_Operation_fail, responseString);
+                            ret = new Pair<>(SecuX_Peripheral_Operation_fail, "Set payment io configuration failed");
                         } else {
                             ret = new Pair<>(SecuX_Peripheral_Operation_OK, "");
                         }

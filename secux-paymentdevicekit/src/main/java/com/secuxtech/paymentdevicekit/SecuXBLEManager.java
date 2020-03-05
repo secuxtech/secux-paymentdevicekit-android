@@ -192,7 +192,7 @@ public class SecuXBLEManager extends BLEManager{
                                     dev.deviceID = uid;
 
                                     if (uid.compareToIgnoreCase(mDeviceID)==0){
-                                        mValidatePeripheralCommand = mNdk.getValidatePeripheralCommand(5, paymentPeripheral);
+                                        mValidatePeripheralCommand = mNdk.getValidatePeripheralCommand(60, paymentPeripheral);
 
                                         strMsg = "";
                                         for (byte b: mValidatePeripheralCommand){
