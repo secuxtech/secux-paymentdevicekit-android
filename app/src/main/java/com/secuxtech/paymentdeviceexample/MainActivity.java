@@ -249,6 +249,7 @@ public class MainActivity extends AppCompatActivity {
                 //final byte[] encryptedData = Base64.decode(encryptedStr, Base64.DEFAULT);
                 final byte[] encryptedData = getEncryptMobilePaymentCommand(devID.substring(devID.length() - 8, devID.length()), amount, ivKey, "PA123456789012345678901234567890");
 
+
                 Pair<Integer, String> ret = peripheralManager.doPaymentVerification(encryptedData, machineIoControlParam);
                 if (ret.first != 0) {
                     Log.i(TAG, "Payment failed! " + ret.second);
@@ -256,6 +257,8 @@ public class MainActivity extends AppCompatActivity {
                     Log.i(TAG, "Payment done");
                     payToDevRet = true;
                 }
+
+
             } catch (Exception e) {
                 Log.i(TAG, "Generate io configuration failed!");
             }
