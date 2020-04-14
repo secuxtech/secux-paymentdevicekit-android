@@ -59,6 +59,8 @@ public class BLEManager {
     private static final String RXCharacteristicUUID = "BC280002-610E-4C94-A5E2-0F352D4B5256";
     private static final String DescriptorUUID = "00002902-0000-1000-8000-00805f9b34fb";
 
+    private static final Integer Max_BLE_Package_Size = 20;
+
     private static Object mWriteDoneLockObject = new Object();
     private static Object mReadDoneLockObject = new Object();
     protected static Object mConnectDoneLockObject = new Object();
@@ -450,7 +452,7 @@ public class BLEManager {
 
                 int sendStartOffset = 0;
                 do {
-                    int sendEndOffset = sendStartOffset + 19;
+                    int sendEndOffset = sendStartOffset + Max_BLE_Package_Size;
                     if (sendEndOffset > data.length){
                         sendEndOffset = data.length - 1;
                     }
@@ -464,7 +466,7 @@ public class BLEManager {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    sendStartOffset += 19;
+                    sendStartOffset += Max_BLE_Package_Size;
                 }while (sendStartOffset < data.length);
             }
         }
@@ -504,12 +506,11 @@ public class BLEManager {
 
                 int sendStartOffset = 0;
                 do {
-                    int sendEndOffset = sendStartOffset + 20;
+                    int sendEndOffset = sendStartOffset + Max_BLE_Package_Size;
                     if (sendEndOffset > data.length){
                         sendEndOffset = data.length;
                     }
                     byte[] sendData = Arrays.copyOfRange(data, sendStartOffset, sendEndOffset);
-
 
                     Log.i(TAG, "send data");
                     logByteArrayHexValue(sendData);
@@ -523,7 +524,7 @@ public class BLEManager {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                    sendStartOffset += 20;
+                    sendStartOffset += Max_BLE_Package_Size;
                 }while (sendStartOffset < data.length);
 
             }
