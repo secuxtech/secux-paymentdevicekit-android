@@ -91,7 +91,6 @@ public class MainActivity extends AppCompatActivity {
                 //BLEManager.getInstance().setBleCallback(bleCallback);
             }
 
-
         }else{
             Toast.makeText(this, "The phone DOES NOT support BLE!", Toast.LENGTH_SHORT).show();
         }
